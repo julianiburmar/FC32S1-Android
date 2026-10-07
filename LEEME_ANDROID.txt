@@ -1,0 +1,41 @@
+FC32S-1 CONTROL PARA ANDROID
+============================
+
+OBJETIVO
+- Control directo desde móvil o tablet Android, sin ordenador.
+- Android -> USB-C/OTG -> adaptador USB-RS485 -> FC32S-1.
+
+FUNCIONES
+- Conectar USB-RS485
+- MARCHA
+- PARO
+- Volumen 4000 a 7500 mL, pasos de 100 mL
+- Lectura y verificación del volumen
+
+PARAMETROS CONFIRMADOS EN EL EQUIPO
+- Modbus RTU
+- ID 1
+- 1200 baud
+- 8N1
+- Registro 0: START=83 decimal (0x0053), STOP=66 decimal (0x0042)
+- Registro 41: palabra LOW del volumen
+- Registro 42: palabra HIGH del volumen
+- Volumen interno = mL x 100
+- Se escribe primero 41 y luego 42
+
+REQUISITOS FISICOS
+- Teléfono/tablet Android con USB Host / OTG.
+- Adaptador USB-C OTG si el adaptador RS485 es USB-A.
+- El mismo adaptador USB-RS485 que ya funciona con el PC suele ser la mejor primera prueba.
+
+COMPILACION
+Este ZIP es un proyecto Android Studio completo. Para generar el APK:
+1. Abrir la carpeta en Android Studio.
+2. Esperar a que Gradle descargue dependencias.
+3. Build > Build Bundle(s) / APK(s) > Build APK(s).
+4. El APK estará en app/build/outputs/apk/debug/app-debug.apk.
+
+Tambien incluye .github/workflows/build-apk.yml para compilar automaticamente con GitHub Actions.
+
+SEGURIDAD
+El boton PARO de la app es una orden de software. No sustituye una seta de emergencia, interbloqueos ni otros sistemas de seguridad de la maquina.
