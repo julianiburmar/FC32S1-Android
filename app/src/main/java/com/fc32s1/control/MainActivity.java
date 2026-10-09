@@ -2,6 +2,7 @@ package com.fc32s1.control;
 
 import android.app.*;
 import android.content.*;
+import android.graphics.Color;
 import android.hardware.usb.*;
 import android.os.*;
 import android.view.*;
@@ -10,8 +11,6 @@ import android.widget.*;
 import com.hoho.android.usbserial.driver.*;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -57,29 +56,62 @@ public class MainActivity extends Activity {
 
     private void buildUi() {
         int pad = dp(18);
+
+        FrameLayout frame = new FrameLayout(this);
+        frame.setBackgroundColor(Color.parseColor("#F7F8FA"));
+
+        ImageView watermark = new ImageView(this);
+        watermark.setImageResource(R.drawable.burmar_logo);
+        watermark.setAdjustViewBounds(true);
+        watermark.setAlpha(0.10f);
+        FrameLayout.LayoutParams wmLp = new FrameLayout.LayoutParams(dp(320), dp(320));
+        wmLp.gravity = Gravity.CENTER;
+        frame.addView(watermark, wmLp);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(pad, pad, pad, pad);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
 
+        ImageView headerLogo = new ImageView(this);
+        headerLogo.setImageResource(R.drawable.burmar_logo);
+        headerLogo.setAdjustViewBounds(true);
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(250), -2);
+        logoLp.setMargins(0, dp(6), 0, dp(8));
+        root.addView(headerLogo, logoLp);
+
         TextView title = new TextView(this);
-        title.setText("CONTROL FC32S-1");
+        title.setText("BURMAR Control");
         title.setTextSize(28);
+        title.setTextColor(Color.parseColor("#161616"));
         title.setGravity(Gravity.CENTER);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
         root.addView(title, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText("FC32S-1 · Dosificación");
+        subtitle.setTextSize(18);
+        subtitle.setTextColor(Color.parseColor("#444444"));
+        subtitle.setGravity(Gravity.CENTER);
+        root.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
 
         TextView cfg = new TextView(this);
         cfg.setText("USB-RS485 · Modbus RTU · 1200 · 8N1 · ID 1");
         cfg.setGravity(Gravity.CENTER);
+        cfg.setTextColor(Color.parseColor("#666666"));
         cfg.setPadding(0, dp(8), 0, dp(16));
         root.addView(cfg, new LinearLayout.LayoutParams(-1, -2));
 
-        connectButton = bigButton("CONECTAR USB-RS485");
+        connectButton = bigButton("CONECTAR USB-RS485", "#0B63CE", Color.WHITE);
         root.addView(connectButton, lp());
         connectButton.setOnClickListener(v -> connectUsb());
 
         status = new TextView(this);
         status.setText("Estado: desconectado");
+        status.setTextColor(Color.parseColor("#202124"));
         status.setTextSize(17);
         status.setPadding(0, dp(12), 0, dp(18));
         root.addView(status, lp());
@@ -87,6 +119,8 @@ public class MainActivity extends Activity {
         TextView label = new TextView(this);
         label.setText("VOLUMEN DE DOSIFICACIÓN");
         label.setTextSize(20);
+        label.setTextColor(Color.parseColor("#161616"));
+        label.setTypeface(null, android.graphics.Typeface.BOLD);
         label.setGravity(Gravity.CENTER);
         root.addView(label, lp());
 
@@ -98,13 +132,14 @@ public class MainActivity extends Activity {
         volumeSpinner.setSelection((6500 - 4000) / 100);
         root.addView(volumeSpinner, lp());
 
-        applyButton = bigButton("APLICAR VOLUMEN");
+        applyButton = bigButton("APLICAR VOLUMEN", "#111111", Color.WHITE);
         applyButton.setEnabled(false);
         root.addView(applyButton, lp());
         applyButton.setOnClickListener(v -> applyVolume());
 
         volumeRead = new TextView(this);
         volumeRead.setText("Volumen actual: —");
+        volumeRead.setTextColor(Color.parseColor("#202124"));
         volumeRead.setTextSize(20);
         volumeRead.setGravity(Gravity.CENTER);
         volumeRead.setPadding(0, dp(10), 0, dp(16));
@@ -113,8 +148,8 @@ public class MainActivity extends Activity {
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.CENTER);
-        startButton = bigButton("▶ MARCHA");
-        stopButton = bigButton("■ PARO");
+        startButton = bigButton("▶ MARCHA", "#12A150", Color.WHITE);
+        stopButton = bigButton("■ PARO", "#D93025", Color.WHITE);
         startButton.setEnabled(false);
         stopButton.setEnabled(false);
         LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, dp(70), 1);
@@ -133,20 +168,23 @@ public class MainActivity extends Activity {
 
         TextView note = new TextView(this);
         note.setText("El PARO de esta app es una orden por software y no sustituye los sistemas de seguridad de la máquina.");
+        note.setTextColor(Color.parseColor("#555555"));
         note.setPadding(0, dp(18), 0, 0);
         root.addView(note, lp());
 
-        ScrollView scroll = new ScrollView(this);
         scroll.addView(root);
-        setContentView(scroll);
+        frame.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(frame);
     }
 
-    private Button bigButton(String text) {
+    private Button bigButton(String text, String bgColor, int textColor) {
         Button b = new Button(this);
         b.setText(text);
         b.setTextSize(19);
         b.setAllCaps(false);
         b.setMinHeight(dp(62));
+        b.setBackgroundColor(Color.parseColor(bgColor));
+        b.setTextColor(textColor);
         return b;
     }
 
