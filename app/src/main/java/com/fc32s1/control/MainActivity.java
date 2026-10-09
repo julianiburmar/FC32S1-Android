@@ -3,6 +3,8 @@ package com.fc32s1.control;
 import android.app.*;
 import android.content.*;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.hardware.usb.*;
 import android.os.*;
 import android.view.*;
@@ -24,14 +26,20 @@ public class MainActivity extends Activity {
     private static final int START_VALUE = 83; // 0x0053 = 'S'
     private static final int STOP_VALUE = 66;  // 0x0042 = 'B'
 
+    private static final int MIN_VOLUME = 4000;
+    private static final int MAX_VOLUME = 7500;
+    private static final int STEP_VOLUME = 100;
+
     private UsbManager usbManager;
     private UsbSerialPort serialPort;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
 
-    private TextView status;
-    private TextView volumeRead;
-    private Spinner volumeSpinner;
+    private TextView statusTitle;
+    private TextView statusSubtitle;
+    private View statusDot;
+    private TextView volumeValue;
     private Button connectButton, applyButton, startButton, stopButton;
+    private int selectedVolume = 6500;
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -39,7 +47,7 @@ public class MainActivity extends Activity {
                 UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 boolean granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
                 if (granted && device != null) connectToDevice(device);
-                else setStatus("Permiso USB rechazado");
+                else setStatus(false, "Sin conexión", "Permiso USB rechazado");
             }
         }
     };
@@ -55,108 +63,151 @@ public class MainActivity extends Activity {
     }
 
     private void buildUi() {
-        int pad = dp(18);
+        getWindow().setStatusBarColor(Color.WHITE);
+        getWindow().setNavigationBarColor(Color.WHITE);
+        if (Build.VERSION.SDK_INT >= 23) {
+            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        }
 
-        FrameLayout frame = new FrameLayout(this);
-        frame.setBackgroundColor(Color.parseColor("#F7F8FA"));
-
-        ImageView watermark = new ImageView(this);
-        watermark.setImageResource(R.drawable.burmar_logo);
-        watermark.setAdjustViewBounds(true);
-        watermark.setAlpha(0.10f);
-        FrameLayout.LayoutParams wmLp = new FrameLayout.LayoutParams(dp(320), dp(320));
-        wmLp.gravity = Gravity.CENTER;
-        frame.addView(watermark, wmLp);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(Color.rgb(247, 249, 252));
+        page.setPadding(dp(16), dp(10), dp(16), dp(12));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER_HORIZONTAL);
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(pad, pad, pad, pad);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.burmar_logo);
+        logo.setAdjustViewBounds(true);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(280), dp(190));
+        logoLp.gravity = Gravity.CENTER_HORIZONTAL;
+        logoLp.setMargins(0, 0, 0, dp(2));
+        content.addView(logo, logoLp);
 
-        ImageView headerLogo = new ImageView(this);
-        headerLogo.setImageResource(R.drawable.burmar_logo);
-        headerLogo.setAdjustViewBounds(true);
-        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(250), -2);
-        logoLp.setMargins(0, dp(6), 0, dp(8));
-        root.addView(headerLogo, logoLp);
+        TextView title = text("Control FC32S-1", 31, Color.rgb(17, 31, 47), true, Gravity.CENTER);
+        content.addView(title, matchWrap());
 
-        TextView title = new TextView(this);
-        title.setText("BURMAR Control");
-        title.setTextSize(28);
-        title.setTextColor(Color.parseColor("#161616"));
-        title.setGravity(Gravity.CENTER);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        root.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        TextView subtitle = text("MÁQUINA DOSIFICADORA", 16, Color.rgb(83, 101, 126), true, Gravity.CENTER);
+        LinearLayout.LayoutParams subLp = matchWrap();
+        subLp.setMargins(0, dp(4), 0, dp(14));
+        content.addView(subtitle, subLp);
 
-        TextView subtitle = new TextView(this);
-        subtitle.setText("FC32S-1 · Dosificación");
-        subtitle.setTextSize(18);
-        subtitle.setTextColor(Color.parseColor("#444444"));
-        subtitle.setGravity(Gravity.CENTER);
-        root.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
+        // ----- Tarjeta de conexión -----
+        LinearLayout statusCard = card();
+        statusCard.setOrientation(LinearLayout.HORIZONTAL);
+        statusCard.setGravity(Gravity.CENTER_VERTICAL);
+        statusCard.setPadding(dp(16), dp(15), dp(14), dp(15));
+        LinearLayout.LayoutParams cardLp = matchWrap();
+        cardLp.setMargins(0, 0, 0, dp(12));
+        content.addView(statusCard, cardLp);
 
-        TextView cfg = new TextView(this);
-        cfg.setText("USB-RS485 · Modbus RTU · 1200 · 8N1 · ID 1");
-        cfg.setGravity(Gravity.CENTER);
-        cfg.setTextColor(Color.parseColor("#666666"));
-        cfg.setPadding(0, dp(8), 0, dp(16));
-        root.addView(cfg, new LinearLayout.LayoutParams(-1, -2));
+        statusDot = new View(this);
+        statusDot.setBackground(circle(Color.rgb(170, 176, 185)));
+        statusCard.addView(statusDot, new LinearLayout.LayoutParams(dp(22), dp(22)));
 
-        connectButton = bigButton("CONECTAR USB-RS485", "#0B63CE", Color.WHITE);
-        root.addView(connectButton, lp());
+        LinearLayout statusText = new LinearLayout(this);
+        statusText.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        stLp.setMargins(dp(12), 0, dp(8), 0);
+        statusCard.addView(statusText, stLp);
+
+        statusTitle = text("Sin conexión", 19, Color.rgb(55, 61, 69), true, Gravity.LEFT);
+        statusSubtitle = text("Conecta el USB-RS485", 14, Color.rgb(86, 103, 126), false, Gravity.LEFT);
+        statusText.addView(statusTitle, matchWrap());
+        statusText.addView(statusSubtitle, matchWrap());
+
+        connectButton = smallButton("🔗  CONECTAR", Color.rgb(234, 238, 244), Color.rgb(26, 42, 62));
+        LinearLayout.LayoutParams conLp = new LinearLayout.LayoutParams(dp(142), dp(56));
+        statusCard.addView(connectButton, conLp);
         connectButton.setOnClickListener(v -> connectUsb());
 
-        status = new TextView(this);
-        status.setText("Estado: desconectado");
-        status.setTextColor(Color.parseColor("#202124"));
-        status.setTextSize(17);
-        status.setPadding(0, dp(12), 0, dp(18));
-        root.addView(status, lp());
+        // ----- Tarjeta de volumen -----
+        LinearLayout volumeCard = card();
+        volumeCard.setOrientation(LinearLayout.VERTICAL);
+        volumeCard.setPadding(dp(14), dp(16), dp(14), dp(16));
+        LinearLayout.LayoutParams volumeCardLp = matchWrap();
+        volumeCardLp.setMargins(0, 0, 0, dp(10));
+        content.addView(volumeCard, volumeCardLp);
 
-        TextView label = new TextView(this);
-        label.setText("VOLUMEN DE DOSIFICACIÓN");
-        label.setTextSize(20);
-        label.setTextColor(Color.parseColor("#161616"));
-        label.setTypeface(null, android.graphics.Typeface.BOLD);
-        label.setGravity(Gravity.CENTER);
-        root.addView(label, lp());
+        TextView volumeLabel = text("▣   VOLUMEN DE DOSIFICACIÓN", 17, Color.rgb(74, 91, 116), true, Gravity.LEFT);
+        volumeCard.addView(volumeLabel, matchWrap());
 
-        List<String> vols = new ArrayList<>();
-        for (int v = 4000; v <= 7500; v += 100) vols.add(v + " mL");
-        volumeSpinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, vols);
-        volumeSpinner.setAdapter(adapter);
-        volumeSpinner.setSelection((6500 - 4000) / 100);
-        root.addView(volumeSpinner, lp());
+        LinearLayout volumeRow = new LinearLayout(this);
+        volumeRow.setOrientation(LinearLayout.HORIZONTAL);
+        volumeRow.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams rowLp = matchWrap();
+        rowLp.setMargins(0, dp(14), 0, dp(12));
+        volumeCard.addView(volumeRow, rowLp);
 
-        applyButton = bigButton("APLICAR VOLUMEN", "#111111", Color.WHITE);
+        Button minus = roundAction("−");
+        volumeRow.addView(minus, new LinearLayout.LayoutParams(dp(74), dp(74)));
+        minus.setOnClickListener(v -> changeVolume(-STEP_VOLUME));
+
+        LinearLayout valueBox = new LinearLayout(this);
+        valueBox.setGravity(Gravity.CENTER);
+        valueBox.setBackground(roundedStroke(Color.WHITE, Color.rgb(215, 222, 232), 1, 18));
+        LinearLayout.LayoutParams valueLp = new LinearLayout.LayoutParams(0, dp(86), 1f);
+        valueLp.setMargins(dp(14), 0, dp(14), 0);
+        volumeRow.addView(valueBox, valueLp);
+
+        volumeValue = text(selectedVolume + " mL", 31, Color.rgb(9, 24, 41), true, Gravity.CENTER);
+        valueBox.addView(volumeValue, matchWrap());
+
+        Button plus = roundAction("+");
+        volumeRow.addView(plus, new LinearLayout.LayoutParams(dp(74), dp(74)));
+        plus.setOnClickListener(v -> changeVolume(STEP_VOLUME));
+
+        LinearLayout presets = new LinearLayout(this);
+        presets.setOrientation(LinearLayout.HORIZONTAL);
+        presets.setGravity(Gravity.CENTER);
+        volumeCard.addView(presets, matchWrap());
+        addPreset(presets, 4000);
+        addPreset(presets, 5000);
+        addPreset(presets, 6500);
+        addPreset(presets, 7500);
+
+        applyButton = coloredButton("▣  APLICAR VOLUMEN", Color.rgb(18, 116, 232), Color.WHITE, 18);
         applyButton.setEnabled(false);
-        root.addView(applyButton, lp());
+        LinearLayout.LayoutParams applyLp = new LinearLayout.LayoutParams(-1, dp(66));
+        applyLp.setMargins(0, dp(14), 0, 0);
+        volumeCard.addView(applyButton, applyLp);
         applyButton.setOnClickListener(v -> applyVolume());
 
-        volumeRead = new TextView(this);
-        volumeRead.setText("Volumen actual: —");
-        volumeRead.setTextColor(Color.parseColor("#202124"));
-        volumeRead.setTextSize(20);
-        volumeRead.setGravity(Gravity.CENTER);
-        volumeRead.setPadding(0, dp(10), 0, dp(16));
-        root.addView(volumeRead, lp());
+        // ----- Marca de agua -----
+        ImageView watermark = new ImageView(this);
+        watermark.setImageResource(R.drawable.burmar_logo);
+        watermark.setAlpha(0.11f);
+        watermark.setAdjustViewBounds(true);
+        watermark.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        LinearLayout.LayoutParams wmLp = new LinearLayout.LayoutParams(-1, dp(175));
+        wmLp.setMargins(0, -dp(12), 0, -dp(12));
+        content.addView(watermark, wmLp);
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.CENTER);
-        startButton = bigButton("▶ MARCHA", "#12A150", Color.WHITE);
-        stopButton = bigButton("■ PARO", "#D93025", Color.WHITE);
+        // ----- MARCHA / PARO -----
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams actionRowLp = matchWrap();
+        actionRowLp.setMargins(0, 0, 0, dp(8));
+        content.addView(actionRow, actionRowLp);
+
+        startButton = coloredButton("▶   MARCHA", Color.rgb(31, 193, 79), Color.WHITE, 20);
+        stopButton = coloredButton("■   PARO", Color.rgb(236, 48, 42), Color.WHITE, 20);
         startButton.setEnabled(false);
         stopButton.setEnabled(false);
-        LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, dp(70), 1);
-        half.setMargins(dp(4), dp(8), dp(4), dp(8));
-        actions.addView(startButton, half);
-        actions.addView(stopButton, half);
-        root.addView(actions, lp());
+
+        LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, dp(78), 1f);
+        half.setMargins(0, 0, dp(6), 0);
+        actionRow.addView(startButton, half);
+        LinearLayout.LayoutParams half2 = new LinearLayout.LayoutParams(0, dp(78), 1f);
+        half2.setMargins(dp(6), 0, 0, 0);
+        actionRow.addView(stopButton, half2);
 
         startButton.setOnClickListener(v -> new AlertDialog.Builder(this)
                 .setTitle("Confirmar MARCHA")
@@ -166,35 +217,138 @@ public class MainActivity extends Activity {
                 .show());
         stopButton.setOnClickListener(v -> writeStartStop(STOP_VALUE, "PARO enviado"));
 
-        TextView note = new TextView(this);
-        note.setText("El PARO de esta app es una orden por software y no sustituye los sistemas de seguridad de la máquina.");
-        note.setTextColor(Color.parseColor("#555555"));
-        note.setPadding(0, dp(18), 0, 0);
-        root.addView(note, lp());
+        TextView note = text("El PARO de esta app es una orden por software y no sustituye los sistemas de seguridad de la máquina.",
+                12, Color.rgb(98, 108, 120), false, Gravity.CENTER);
+        LinearLayout.LayoutParams noteLp = matchWrap();
+        noteLp.setMargins(dp(12), dp(4), dp(12), dp(8));
+        content.addView(note, noteLp);
 
-        scroll.addView(root);
-        frame.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
-        setContentView(frame);
+        // ----- Navegación inferior visual -----
+        LinearLayout nav = new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setGravity(Gravity.CENTER);
+        nav.setBackground(rounded(Color.WHITE, 22));
+        nav.setElevation(dp(3));
+        nav.setPadding(dp(6), dp(8), dp(6), dp(8));
+
+        addNav(nav, "⌂\nControl", Color.rgb(18, 116, 232), true);
+        addNav(nav, "⚙\nAjustes", Color.rgb(96, 105, 116), false);
+        addNav(nav, "▥\nEstado", Color.rgb(96, 105, 116), false);
+
+        page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        page.addView(nav, new LinearLayout.LayoutParams(-1, dp(70)));
+        setContentView(page);
     }
 
-    private Button bigButton(String text, String bgColor, int textColor) {
+    private void addPreset(LinearLayout parent, int ml) {
+        Button b = smallButton(ml + "\nmL", Color.rgb(235, 239, 245), Color.rgb(29, 43, 59));
+        b.setTextSize(14);
+        b.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(62), 1f);
+        p.setMargins(dp(3), 0, dp(3), 0);
+        parent.addView(b, p);
+        b.setOnClickListener(v -> {
+            selectedVolume = ml;
+            updateVolumeLabel();
+        });
+    }
+
+    private void addNav(LinearLayout parent, String label, int color, boolean selected) {
+        TextView tv = text(label, 13, color, selected, Gravity.CENTER);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -1, 1f);
+        parent.addView(tv, p);
+    }
+
+    private void changeVolume(int delta) {
+        selectedVolume += delta;
+        if (selectedVolume < MIN_VOLUME) selectedVolume = MIN_VOLUME;
+        if (selectedVolume > MAX_VOLUME) selectedVolume = MAX_VOLUME;
+        updateVolumeLabel();
+    }
+
+    private void updateVolumeLabel() {
+        volumeValue.setText(selectedVolume + " mL");
+    }
+
+    private LinearLayout card() {
+        LinearLayout l = new LinearLayout(this);
+        l.setBackground(rounded(Color.WHITE, 22));
+        l.setElevation(dp(3));
+        return l;
+    }
+
+    private Button roundAction(String text) {
         Button b = new Button(this);
         b.setText(text);
-        b.setTextSize(19);
-        b.setAllCaps(false);
-        b.setMinHeight(dp(62));
-        b.setBackgroundColor(Color.parseColor(bgColor));
-        b.setTextColor(textColor);
+        b.setTextSize(34);
+        b.setTextColor(Color.rgb(15, 29, 44));
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(0, 0, 0, dp(4));
+        b.setBackground(circle(Color.rgb(233, 238, 245)));
         return b;
     }
 
-    private LinearLayout.LayoutParams lp() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-        p.setMargins(0, dp(5), 0, dp(5));
-        return p;
+    private Button coloredButton(String text, int bg, int fg, int size) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(size);
+        b.setTypeface(null, Typeface.BOLD);
+        b.setAllCaps(false);
+        b.setTextColor(fg);
+        b.setBackground(rounded(bg, 18));
+        b.setPadding(dp(10), 0, dp(10), 0);
+        return b;
     }
 
-    private int dp(int v) { return (int) (v * getResources().getDisplayMetrics().density + 0.5f); }
+    private Button smallButton(String text, int bg, int fg) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(15);
+        b.setTypeface(null, Typeface.BOLD);
+        b.setAllCaps(false);
+        b.setTextColor(fg);
+        b.setBackground(rounded(bg, 16));
+        b.setPadding(dp(8), 0, dp(8), 0);
+        return b;
+    }
+
+    private TextView text(String s, int sp, int color, boolean bold, int gravity) {
+        TextView t = new TextView(this);
+        t.setText(s);
+        t.setTextSize(sp);
+        t.setTextColor(color);
+        t.setGravity(gravity);
+        if (bold) t.setTypeface(null, Typeface.BOLD);
+        return t;
+    }
+
+    private LinearLayout.LayoutParams matchWrap() {
+        return new LinearLayout.LayoutParams(-1, -2);
+    }
+
+    private GradientDrawable rounded(int color, int radiusDp) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadius(dp(radiusDp));
+        return d;
+    }
+
+    private GradientDrawable roundedStroke(int color, int strokeColor, int strokeDp, int radiusDp) {
+        GradientDrawable d = rounded(color, radiusDp);
+        d.setStroke(dp(strokeDp), strokeColor);
+        return d;
+    }
+
+    private GradientDrawable circle(int color) {
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.OVAL);
+        d.setColor(color);
+        return d;
+    }
+
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
+    }
 
     private void connectUsb() {
         if (serialPort != null) {
@@ -204,7 +358,7 @@ public class MainActivity extends Activity {
 
         List<UsbSerialDriver> drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager);
         if (drivers.isEmpty()) {
-            setStatus("No se encontró adaptador USB serie. Comprueba OTG y el cable.");
+            setStatus(false, "Sin conexión", "No se encontró adaptador USB serie");
             return;
         }
         UsbSerialDriver driver = drivers.get(0);
@@ -214,7 +368,7 @@ public class MainActivity extends Activity {
                     new Intent(ACTION_USB_PERMISSION).setPackage(getPackageName()),
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             usbManager.requestPermission(device, pi);
-            setStatus("Solicitando permiso USB…");
+            setStatus(false, "Conectando…", "Solicitando permiso USB");
             return;
         }
         connectToDevice(device);
@@ -235,12 +389,12 @@ public class MainActivity extends Activity {
                     applyButton.setEnabled(true);
                     startButton.setEnabled(true);
                     stopButton.setEnabled(true);
-                    setStatus("Conectado al USB-RS485");
+                    setStatus(true, "Conectado", "FC32S-1 lista para operar");
                 });
                 readCurrentVolume();
             } catch (Exception e) {
                 closePort();
-                setStatusUi("Error de conexión: " + e.getMessage());
+                setStatusUi(false, "Sin conexión", "Error: " + e.getMessage());
             }
         });
     }
@@ -249,59 +403,55 @@ public class MainActivity extends Activity {
         io.execute(() -> {
             closePort();
             runOnUiThread(() -> {
-                connectButton.setText("CONECTAR USB-RS485");
+                connectButton.setText("🔗  CONECTAR");
                 applyButton.setEnabled(false);
                 startButton.setEnabled(false);
                 stopButton.setEnabled(false);
-                volumeRead.setText("Volumen actual: —");
-                setStatus("Desconectado");
+                setStatus(false, "Sin conexión", "Conecta el USB-RS485");
             });
         });
     }
 
     private void applyVolume() {
         if (serialPort == null) return;
-        String s = (String) volumeSpinner.getSelectedItem();
-        int ml = Integer.parseInt(s.replace(" mL", ""));
+        final int ml = selectedVolume;
         io.execute(() -> {
             try {
                 long scaled = (long) ml * 100L;
                 int low = (int) (scaled & 0xFFFF);
                 int high = (int) ((scaled >> 16) & 0xFFFF);
+
+                // Importante: palabra baja primero y palabra alta después.
                 writeRegister(REG_VOLUME_LOW, low);
                 Thread.sleep(150);
                 writeRegister(REG_VOLUME_HIGH, high);
                 Thread.sleep(150);
+
                 int readLow = readRegister(REG_VOLUME_LOW);
                 int readHigh = readRegister(REG_VOLUME_HIGH);
                 long verified = ((long) readHigh << 16) | (readLow & 0xFFFFL);
                 if (verified != scaled) throw new IOException("Verificación incorrecta");
-                runOnUiThread(() -> {
-                    volumeRead.setText(String.format(Locale.getDefault(), "Volumen actual: %.2f mL", verified / 100.0));
-                    setStatus("Volumen aplicado correctamente");
-                });
+
+                setStatusUi(true, "Conectado", String.format(Locale.getDefault(), "Volumen aplicado: %.2f mL", verified / 100.0));
             } catch (Exception e) {
-                setStatusUi("Error al cambiar volumen: " + e.getMessage());
+                setStatusUi(true, "Conectado", "Error al cambiar volumen: " + e.getMessage());
             }
         });
     }
 
     private void readCurrentVolume() {
-        io.execute(() -> {
-            try {
-                int low = readRegister(REG_VOLUME_LOW);
-                int high = readRegister(REG_VOLUME_HIGH);
-                long v = ((long) high << 16) | (low & 0xFFFFL);
-                double ml = v / 100.0;
-                runOnUiThread(() -> {
-                    volumeRead.setText(String.format(Locale.getDefault(), "Volumen actual: %.2f mL", ml));
-                    int rounded = (int) Math.round(ml / 100.0) * 100;
-                    if (rounded >= 4000 && rounded <= 7500) volumeSpinner.setSelection((rounded - 4000) / 100);
-                });
-            } catch (Exception e) {
-                setStatusUi("Conectado, pero no se pudo leer volumen: " + e.getMessage());
+        try {
+            int low = readRegister(REG_VOLUME_LOW);
+            int high = readRegister(REG_VOLUME_HIGH);
+            long v = ((long) high << 16) | (low & 0xFFFFL);
+            int ml = (int) Math.round(v / 100.0);
+            if (ml >= MIN_VOLUME && ml <= MAX_VOLUME) {
+                selectedVolume = (ml / STEP_VOLUME) * STEP_VOLUME;
+                runOnUiThread(this::updateVolumeLabel);
             }
-        });
+        } catch (Exception e) {
+            setStatusUi(true, "Conectado", "No se pudo leer el volumen: " + e.getMessage());
+        }
     }
 
     private void writeStartStop(int value, String ok) {
@@ -309,9 +459,9 @@ public class MainActivity extends Activity {
         io.execute(() -> {
             try {
                 writeRegister(REG_START_STOP, value);
-                setStatusUi(ok);
+                setStatusUi(true, "Conectado", ok);
             } catch (Exception e) {
-                setStatusUi("Error: " + e.getMessage());
+                setStatusUi(true, "Conectado", "Error: " + e.getMessage());
             }
         });
     }
@@ -384,8 +534,16 @@ public class MainActivity extends Activity {
         return crc & 0xFFFF;
     }
 
-    private void setStatus(String s) { status.setText("Estado: " + s); }
-    private void setStatusUi(String s) { runOnUiThread(() -> setStatus(s)); }
+    private void setStatus(boolean connected, String title, String subtitle) {
+        statusTitle.setText(title);
+        statusSubtitle.setText(subtitle);
+        statusTitle.setTextColor(connected ? Color.rgb(18, 117, 55) : Color.rgb(55, 61, 69));
+        statusDot.setBackground(circle(connected ? Color.rgb(31, 193, 79) : Color.rgb(170, 176, 185)));
+    }
+
+    private void setStatusUi(boolean connected, String title, String subtitle) {
+        runOnUiThread(() -> setStatus(connected, title, subtitle));
+    }
 
     private void closePort() {
         if (serialPort != null) {
